@@ -1409,6 +1409,13 @@ void Pc_QuickOptions_Update(int up, int down, int left, int right,
             if (mMoved) s_sel = row;
             if (mClick)
             {
+                /* On Android a single tap arrives TWICE: SDL synthesises a mouse
+                 * click from it (this path) and the touch overlay separately
+                 * presses Action, which reaches us as `confirm` below. Both then
+                 * activated the same row -- most visibly on a "Next page" row,
+                 * which advanced two pages at once. Whichever path sees the tap
+                 * first owns it. */
+                confirm = 0;
                 s_sel = row;
                 if (qo_row_is_list(&rows[row]) && mpx > (s_geoPanelL + s_geoPanelR) * 0.5f)
                 {
@@ -1490,6 +1497,7 @@ void Pc_QuickOptions_Draw(void)
     GLint vp[4];
     float vpW, vpH, panelW, panelH, panelL, panelR, panelT, panelB;
     float titleH, hintH, listT, listB, listH, rowPitch, rowH, pad, dim = 1.0f;
+    float pxWant, pitchWant;
     int   visRows;
     int   nRows;
     const QoRowDef* rows = qo_page_rows(s_page, &nRows);
@@ -1633,20 +1641,17 @@ void Pc_QuickOptions_Draw(void)
     listT    = panelT - titleH;
     listB    = panelB + hintH;
     listH    = listT - listB;
-    /* Size rows for legibility FIRST, then scroll if they do not all fit. The
-     * old listH/nRows made every row added to a page shrink that page's text --
-     * the 14-row Controls page rendered at 20px on a 1080p handheld. */
-    {
-        float pxWant = vpH * 0.028f;
-        float pitchWant;
+    /* Size rows for legibility FIRST, then scroll if they do not all fit. Sizing
+     * them as listH/nRows instead made every row added to a page shrink that
+     * page's text -- the 14-row Controls page rendered at 20px on a 1080p
+     * handheld. */
+    pxWant = vpH * 0.028f;
+    if (pxWant < 13.0f) pxWant = 13.0f;
+    pitchWant = pxWant / (0.84f * 0.52f);
 
-        if (pxWant < 13.0f) pxWant = 13.0f;
-        pitchWant = pxWant / (0.84f * 0.52f);
-
-        visRows = (int)(listH / pitchWant);
-        if (visRows < 3)     visRows = 3;
-        if (visRows > nRows) visRows = nRows;
-    }
+    visRows = (int)(listH / pitchWant);
+    if (visRows < 3)     visRows = 3;
+    if (visRows > nRows) visRows = nRows;
 
     /* Keep the selected row on screen. */
     if (s_scrollTop > s_sel)                 s_scrollTop = s_sel;
@@ -1654,10 +1659,18 @@ void Pc_QuickOptions_Draw(void)
     if (s_scrollTop > nRows - visRows)       s_scrollTop = nRows - visRows;
     if (s_scrollTop < 0)                     s_scrollTop = 0;
 
-    rowPitch = listH / (float)visRows;
+    /* The SAME pitch and glyph size on every page. Deriving them from
+     * listH/visRows instead let a short page stretch its rows to fill the panel
+     * and render visibly larger text than a full one, so the size jumped around
+     * as you paged through. */
+    rowPitch = pitchWant;
     rowH     = rowPitch * 0.84f;
-    px       = (int)(rowH * 0.52f);
+    px       = (int)pxWant;
     if (px < 8) px = 8;
+
+    /* Centre the block of rows, so a page with only a few does not hug the
+     * title bar with a gulf of empty panel under it. */
+    listT -= (listH - (float)visRows * rowPitch) * 0.5f;
 
     if (s_bakedForPx != px || s_bakedForPage != s_page)
     {
