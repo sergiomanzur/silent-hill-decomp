@@ -4759,6 +4759,20 @@ static bool Player_CombatAnimUpdate(s_SubCharacter* player, s_PlayerExtra* extra
             D_800C4554 = NO_VALUE;
         }
 
+#ifdef SH_PC_PORT
+        /* OTS/TPS/FPS free-aim: the attack goes where the CAMERA points, which is
+         * what the body yaw already is (the camera shim pins rotation.vy to
+         * g_TpsCamYaw). This mirrors what the gun path does a few hundred lines
+         * up, where PlayerState_Combat + a cleared g_Player_TargetNpcIdx keep the
+         * bullet on the camera ray instead of the body's lock. Melee never got
+         * the same treatment, so a swing followed the PSX lock rather than the
+         * reticle. Fixed/tank cameras keep the original auto-face. */
+        if (g_DebugThirdPersonCam)
+        {
+            player->angleToTarget = player->rotation.vy;
+        }
+        else
+#endif
         if ((*enemyAttackedIdx) == g_SysWork.targetNpcIdx)
         {
             player->angleToTarget = Q12_FRACT(ratan2((g_SysWork.npcs[(*enemyAttackedIdx)].position.vx + g_SysWork.npcs[(*enemyAttackedIdx)].collision.shapeOffsets.box.vx) - g_SysWork.playerWork.player.position.vx,
@@ -4829,7 +4843,24 @@ static bool Player_CombatAnimUpdate(s_SubCharacter* player, s_PlayerExtra* extra
                 func_8005CD38(enemyAttackedIdx, &playerProps.field_122, &g_SysWork.playerCombat, Q12(1.0f), Q12(1.0f), 5);
             }
 
+#ifdef SH_PC_PORT
+            /* Same rule as above, and this is the branch that was visibly wrong:
+             * the ELSE arm SNAPS rotation.vy onto the enemy. The later
+             * `if (g_DebugThirdPersonCam) D_800C454C = 0` only suppresses the
+             * gradual turn, so the snap still fired whenever the target came
+             * within 0x80 -- and a circling air screamer re-crosses that
+             * threshold constantly, wrenching Harry's body (and therefore his
+             * movement direction, which is body-relative) around to track it
+             * with no input. */
+            if (g_DebugThirdPersonCam)
+            {
+                player->angleToTarget = player->rotation.vy;
+                D_800C454C            = 0;
+            }
+            else if ((*enemyAttackedIdx) == g_SysWork.targetNpcIdx)
+#else
             if ((*enemyAttackedIdx) == g_SysWork.targetNpcIdx)
+#endif
             {
                 temp_a1 = Q12_FRACT(ratan2((g_SysWork.npcs[(*enemyAttackedIdx)].position.vx + g_SysWork.npcs[(*enemyAttackedIdx)].collision.shapeOffsets.box.vx) - g_SysWork.playerWork.player.position.vx,
                                            (g_SysWork.npcs[(*enemyAttackedIdx)].position.vz + g_SysWork.npcs[(*enemyAttackedIdx)].collision.shapeOffsets.box.vz) - g_SysWork.playerWork.player.position.vz) + Q12(1.0f));
