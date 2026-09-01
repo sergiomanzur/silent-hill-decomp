@@ -218,6 +218,21 @@ set_source_files_properties(
     "${DECOMP_DIR}/src/bodyprog/items/item_screens_2.c"
     PROPERTIES COMPILE_OPTIONS "-O0")
 
+# The same class of fault, in the drawer that renders the inventory carousel.
+# libgs_stub.c's GsSortObject4J and its GsTMDfast* dispatch are used by NOTHING
+# but the item screen, and at -O2 the NDK Clang loses the primitive emission:
+# every item model linked, sorted and passed all its guards, yet the carousel
+# rendered empty. Proven the same way the case above was: adding side-effecting
+# counters inside those loops -- writes the optimiser cannot discard -- made the
+# models appear with no other change, and removing them made them vanish again.
+#
+# Same caveat as above: this is a WORKAROUND. The real cause is UB somewhere in
+# this file giving Clang licence to drop the stores, and that is what should
+# eventually be fixed. Scoped per-file; everything else keeps -O2.
+set_source_files_properties(
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/stubs/libgs_stub.c"
+    PROPERTIES COMPILE_OPTIONS "-O0")
+
 # Android ships no OpenAL, so the legacy AL renderer is left out of the build
 # entirely and the software stack (xa_player_software.c + PsyX_SPUSoftware,
 # both SDL-sinked) becomes the only audio path. SH_NO_OPENAL collapses
